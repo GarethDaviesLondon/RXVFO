@@ -23,9 +23,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Rotary.h>
+#include "CommandLine.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
+    int underBarX;
+    int underBarY;
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -39,7 +42,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define pulseHigh(pin) {digitalWrite(pin, HIGH); digitalWrite(pin, LOW); }
 #define IFFREQ 455000
 #define STARTFREQ 14000000
-int tuneStep=50;
+
+long tuneStep;
 double rx;
 
 //Set up rotary encoder
@@ -70,12 +74,18 @@ void setup() {
 
   ///
   rx=STARTFREQ;
+  tuneStep=1000;
+  setTuneStepIndicator();
   displayFrequency(rx);
   sendFrequency(rx+IFFREQ);
   
 }
 
 void loop() {
+  if (getCommandLineFromSerialPort(CommandLine) )
+          {
+            DoCommand(CommandLine);
+          }
   int result = r.process();
   if (result)
   {
@@ -142,6 +152,10 @@ void displayFrequency(double hzd)
     Serial.print(ones);
   */
     
+    if (millions<10)
+    {
+      display.print("0");
+    }
     display.print(millions);
     display.print(".");
     display.print(hundredthousands);
@@ -154,10 +168,111 @@ void displayFrequency(double hzd)
     display.print(ones);
     display.setTextSize(1); // Draw 1X-scale text
     display.setTextColor(SSD1306_WHITE);
-    display.setCursor(10, 20);
+
+
+    display.setCursor(underBarX,underBarY);
+    display.print("-");
+    
+    display.setCursor(95, 25);
     display.print("G0CIT");
     display.display();      // Show initial text
   
+}
+
+
+
+/////////////?COMMAND LINE INTERFACE EXECUTION
+
+void printHelp()
+{
+   Serial.println("");
+   Serial.println("Commands");
+   Serial.println("set | s");
+   Serial.println("step | st");
+   Serial.println("Help | ?");
+}
+
+void setTuneStepIndicator()
+{
+    underBarY = 15;
+    if (tuneStep==10000000) underBarX=13;
+    if (tuneStep==1000000) underBarX=22;
+    if (tuneStep==100000) underBarX=48;
+    if (tuneStep==10000) underBarX=60;
+    if (tuneStep==1000) underBarX=72;
+    if (tuneStep<1000) underBarY=7;
+    if (tuneStep==100) underBarX=88;
+    if (tuneStep==10) underBarX=95;
+    if (tuneStep==1) underBarX=100;
+}
+
+
+/*************************************************************************************************************
+     your Command Names Here
+*/
+const char *helpCommandToken = "?";
+const char *helpCommandToken2 = "help";
+const char *setToken = "set";
+const char *setToken2 = "s";
+const char *stepToken = "step";
+const char *stepToken2 = "st";
+const char *Ytoken = "y";
+const char *Xtoken = "x";
+
+/****************************************************
+   DoMyCommand
+*/
+
+bool DoCommand(char * commandLine) {
+
+  bool commandExecuted=false;
+  char * ptrToCommandName = strtok(commandLine, delimiters);
+
+   //HELP COMMAND /////////
+   if ((strcmp(ptrToCommandName, helpCommandToken) == 0) | strcmp(ptrToCommandName, helpCommandToken2)==0)  { 
+     printHelp();
+     commandExecuted=true;
+   }
+   
+   if ((strcmp(ptrToCommandName, setToken) == 0) | strcmp(ptrToCommandName, setToken2)==0)  { 
+      long value = readNumber();
+      rx=value;
+      displayFrequency(rx);
+      sendFrequency(rx+IFFREQ);
+      commandExecuted=true;
+   }
+   
+   if ((strcmp(ptrToCommandName, stepToken) == 0) | strcmp(ptrToCommandName, stepToken2)==0)  { 
+     long value = readNumber();
+     tuneStep=value;
+     setTuneStepIndicator();
+     displayFrequency(rx);
+     commandExecuted=true;
+   }
+
+ if ((strcmp(ptrToCommandName, Xtoken) == 0) )  { 
+     long value = readNumber();
+     underBarX=(int)value;
+     displayFrequency(rx);
+     commandExecuted=true;
+   }
+
+   if ((strcmp(ptrToCommandName, Ytoken) == 0) )  { 
+     long value = readNumber();
+     underBarY=(int)value;
+     displayFrequency(rx);
+     commandExecuted=true;
+   }
+
+
+   
+   if (!commandExecuted)
+   {
+      Serial.println("Error");
+      Serial.println("\n");
+      printHelp();
+   }
+
 }
 
 
