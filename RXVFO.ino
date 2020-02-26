@@ -44,6 +44,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define STARTFREQ 14000000
 
 long tuneStep;
+long ifFreq = IFFREQ;
 double rx;
 
 //Set up rotary encoder
@@ -77,7 +78,7 @@ void setup() {
   tuneStep=1000;
   setTuneStepIndicator();
   displayFrequency(rx);
-  sendFrequency(rx+IFFREQ);
+  sendFrequency(rx+ifFreq);
   
 }
 
@@ -92,18 +93,19 @@ void loop() {
     if (result == DIR_CW) {
         rx+=tuneStep;
         displayFrequency(rx);
-        sendFrequency(rx+IFFREQ);
+        sendFrequency(rx);
       } else {
         rx-=tuneStep;
         displayFrequency(rx);
-        sendFrequency(rx+IFFREQ);      
+        sendFrequency(rx);      
       }
   }
 }
 
 
 // frequency calc from datasheet page 8 = <sys clock> * <frequency tuning word>/2^32
-void sendFrequency(double frequency) {  
+void sendFrequency(double frequency) {
+  frequency = frequency+ifFreq;  //IF Offset
   int32_t freq = frequency * 4294967295/125000000;  // note 125 MHz clock on 9850.  You can make 'slight' tuning variations here by adjusting the clock frequency.
   for (int b=0; b<4; b++, freq>>=8) {
     tfr_byte(freq & 0xFF);
@@ -187,8 +189,11 @@ void printHelp()
 {
    Serial.println("");
    Serial.println("Commands");
-   Serial.println("set | s");
-   Serial.println("step | st");
+   Serial.println("set [long integer] (set operating frequency)");
+   Serial.println("step [long integer] (set tuning step)");
+   Serial.println("setif [integer] (test y position of underbar)");
+   Serial.println("y (test y position of underbar)");
+   Serial.println("x (test x position of underbar)");
    Serial.println("Help | ?");
 }
 
@@ -218,6 +223,7 @@ const char *stepToken = "step";
 const char *stepToken2 = "st";
 const char *Ytoken = "y";
 const char *Xtoken = "x";
+const char *IFSHIFT= "setif";
 
 /****************************************************
    DoMyCommand
@@ -238,7 +244,7 @@ bool DoCommand(char * commandLine) {
       long value = readNumber();
       rx=value;
       displayFrequency(rx);
-      sendFrequency(rx+IFFREQ);
+      sendFrequency(rx);
       commandExecuted=true;
    }
    
@@ -264,6 +270,13 @@ bool DoCommand(char * commandLine) {
      commandExecuted=true;
    }
 
+  if ((strcmp(ptrToCommandName, IFSHIFT) == 0) )  { 
+     long value = readNumber();
+     ifFreq=(int)value;
+     displayFrequency(rx);
+     displayFrequency(rx);
+     commandExecuted=true;
+   }
 
    
    if (!commandExecuted)
