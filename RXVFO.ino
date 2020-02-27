@@ -11,6 +11,7 @@ save
  
 
  **************************************************************************/
+#define DEBUG 1
 
 #include <SPI.h>
 #include <Wire.h>
@@ -19,12 +20,24 @@ save
 #include <Rotary.h>
 
 #include "CommandLine.h"
+#include <EEPROM.h> //Library needed to read and write from the EEPROM
 
+
+//DEALS WITH THE EEPROM
+#define SIGNATURE 0xAABB //Used to check if the EEPROM has been initialised
+#define SIGLOCATION 0
+#define FREQLOCATION 4
+#define STEPLOCATION 8
+#define DEFAULTFREQ 7000000
+#define DEFAULTSTEP 1000
+#define UPDATEDELAY 1000
+
+
+/// Deals with the OLED Display
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
-    int underBarX;
-    int underBarY;
-
+int underBarX;
+int underBarY;
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -45,7 +58,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define RESET 11  // Pin 11 - connect to reset pin (RST) 
 #define pulseHigh(pin) {digitalWrite(pin, HIGH); digitalWrite(pin, LOW); }
 #define IFFREQ 455000
-#define STARTFREQ 14000000
+#define MAXFREQ 15000000
+#define MINFREQ 100000
 
 long tuneStep;
 long ifFreq = IFFREQ;
@@ -81,13 +95,15 @@ void setup() {
   pinMode(PUSHSWITCH,INPUT_PULLUP);
 
   ///
-  rx=STARTFREQ;
-  tuneStep=1000;
+  readDefaults();
   setTuneStepIndicator();
   displayFrequency(rx);
   sendFrequency(rx+ifFreq);
   
 }
+
+unsigned long int lastMod;
+bool freqChanged = false;
 
 void loop() {
   if (getCommandLineFromSerialPort(CommandLine) )
@@ -97,18 +113,27 @@ void loop() {
   int result = r.process();
   if (result)
   {
+    freqChanged=true;
+    lastMod=millis();
     if (result == DIR_CW) {
         rx+=tuneStep;
+        if (rx>MAXFREQ) {rx = MAXFREQ;}
         displayFrequency(rx);
         sendFrequency(rx);
       } else {
         rx-=tuneStep;
+        if (rx<MINFREQ) {rx = MINFREQ;}
         displayFrequency(rx);
         sendFrequency(rx);      
       }
   }
   if (digitalRead(PUSHSWITCH)==LOW){
     doMainButtonPress();
+  }
+  if ((freqChanged) & (millis()-lastMod>UPDATEDELAY) )
+  {
+    commitEPROMVals();
+    freqChanged=false;
   }
   
 }
@@ -268,6 +293,86 @@ void displayFrequency(double hzd)
     display.print("GARETH - G0CIT");
 
     display.display();      // Show initial text
+}
+
+/**** DEAL WITH EEPROM ****/
+
+void returnToDefault()
+{
+  rx=DEFAULTFREQ;
+  tuneStep=DEFAULTSTEP;
+  setTuneStepIndicator();
+  displayFrequency(rx);
+}
+
+
+void readDefaults()
+{
+  
+  if (readEPROM(SIGLOCATION) != SIGNATURE)
+    {
+      //Means that there has not been any initialised sequence
+      returnToDefault();
+    }
+    else
+    {
+      readEPROMVals();
+    }
+}
+
+void readEPROMVals()
+{
+      rx=readEPROM(FREQLOCATION);
+      tuneStep=readEPROM(STEPLOCATION);
+}
+
+void commitEPROMVals()
+{
+      writeEPROM(SIGLOCATION,SIGNATURE);
+      writeEPROM(FREQLOCATION,rx);
+      writeEPROM(STEPLOCATION,tuneStep);
+}
+
+
+void writeEPROM(int addr, unsigned long int inp)
+{
+  byte LSB=inp;
+  byte MSB=inp>>8;
+  byte MMSB=inp>>16;
+  byte MMMSB=inp>>24;
+  EEPROM.update(addr,LSB);
+  EEPROM.update(addr+1,MSB);
+  EEPROM.update(addr+2,MMSB);
+  EEPROM.update(addr+3,MMMSB);  
+#ifdef DEBUG
+  Serial.print("EEPROM LOC:");
+  Serial.print(addr);
+  Serial.print(" Write = ");
+  Serial.println(inp);
+#endif
+}
+
+
+unsigned long int readEPROM(int addr)
+{
+  byte LSB=EEPROM.read(addr);
+  byte MSB=EEPROM.read(addr+1);
+  byte MMSB=EEPROM.read(addr+2);
+  byte MMMSB=EEPROM.read(addr+3);
+  unsigned long int OP=MMMSB;
+  OP = (OP<<8);
+  OP = OP|MMSB;
+  OP = (OP<<8);
+  OP = OP|MSB;
+  OP = (OP<<8);
+  OP = OP|LSB;
+#ifdef DEBUG
+  Serial.print("EEPROM LOC:");
+  Serial.print(addr);
+  Serial.print(" = ");
+  Serial.println(OP);
+#endif
+  return OP;
 }
 
 
