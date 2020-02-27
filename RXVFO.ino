@@ -57,6 +57,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define RESET 11  // Pin 11 - connect to reset pin (RST) 
 #define pulseHigh(pin) {digitalWrite(pin, HIGH); digitalWrite(pin, LOW); }
 #define IFFREQ 455000
+#define MAXFREQ 15000000
+#define MINFREQ 100000
 
 long tuneStep;
 long ifFreq = IFFREQ;
@@ -114,10 +116,12 @@ void loop() {
     lastMod=millis();
     if (result == DIR_CW) {
         rx+=tuneStep;
+        if (rx>MAXFREQ) {rx = MAXFREQ;}
         displayFrequency(rx);
         sendFrequency(rx);
       } else {
         rx-=tuneStep;
+        if (rx<MINFREQ) {rx = MINFREQ;}
         displayFrequency(rx);
         sendFrequency(rx);      
       }
