@@ -1,21 +1,13 @@
 /**************************************************************************
- This is an example for our Monochrome OLEDs based on SSD1306 drivers
 
- Pick one up today in the adafruit shop!
- ------> http://www.adafruit.com/category/63_98
 
- This example is for a 128x32 pixel display using I2C to communicate
- 3 pins are required to interface (two I2C and one reset).
+ Credits to: 
+ 
+  Limor Fried/Ladyada for Adafruit Industries for OLED code
 
- Adafruit invests time and resources providing this open
- source code, please support Adafruit and open-source
- hardware by purchasing products from Adafruit!
+  
+ 
 
- Written by Limor Fried/Ladyada for Adafruit Industries,
- with contributions from the open source community.
- BSD license, check license.txt for more information
- All text above, and the splash screen below must be
- included in any redistribution.
  **************************************************************************/
 
 #include <SPI.h>
@@ -103,7 +95,16 @@ void loop() {
 }
 
 
+
+
 // frequency calc from datasheet page 8 = <sys clock> * <frequency tuning word>/2^32
+/*
+ * The send Frequency code comes from 
+ * https://create.arduino.cc/projecthub/mircemk/arduino-dds-vfo-with-ad9850-module-be3d5e
+ * Credit to Mirko Pavleski
+ */
+
+
 void sendFrequency(double frequency) {
   frequency = frequency+ifFreq;  //IF Offset
   int32_t freq = frequency * 4294967295/125000000;  // note 125 MHz clock on 9850.  You can make 'slight' tuning variations here by adjusting the clock frequency.
@@ -126,8 +127,6 @@ void tfr_byte(byte data)
 
 void displayFrequency(double hzd)
 {
-
-
     long hz = long(hzd/1);
     long millions = int(hz/1000000);
     long hundredthousands = ((hz/100000)%10);
@@ -170,21 +169,22 @@ void displayFrequency(double hzd)
     display.print(ones);
     display.setTextSize(1); // Draw 1X-scale text
     display.setTextColor(SSD1306_WHITE);
-
-
     display.setCursor(underBarX,underBarY);
     display.print("-");
-    
     display.setCursor(95, 25);
-    display.print("G0CIT");
+    display.print("Gareth, G0CIT");
     display.display();      // Show initial text
-  
 }
 
 
 
-/////////////?COMMAND LINE INTERFACE EXECUTION
+/** Command Line Interface Routines
+ *  
+ *  Sorry I can't remember where I cribbed this from, but thanks whoever donated this part.
+ *  
+ */
 
+ 
 void printHelp()
 {
    Serial.println("");
@@ -293,7 +293,9 @@ bool DoCommand(char * commandLine) {
 
 
 
-/* OLD CODE EXAPLES 
+/* This is old code from the adafruit library for the display. 
+ *  Not currently used but here so I know where to look if I need it
+ *  
 
 void testdrawline() {
   int16_t i;
