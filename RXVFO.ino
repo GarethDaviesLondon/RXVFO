@@ -6,6 +6,7 @@
   Limor Fried/Ladyada for Adafruit Industries for OLED code
 
 save
+
   
  
 
@@ -186,6 +187,7 @@ void doMainButtonPress(){
 
 
 
+
 // frequency calc from datasheet page 8 = <sys clock> * <frequency tuning word>/2^32
 /*
  * The send Frequency code comes from 
@@ -264,6 +266,7 @@ void displayFrequency(double hzd)
     //display.print("G0CIT");
     display.setCursor(0, 25);
     display.print("GARETH - G0CIT");
+
     display.display();      // Show initial text
 }
 
