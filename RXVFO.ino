@@ -5,10 +5,13 @@
  
   Limor Fried/Ladyada for Adafruit Industries for OLED code
 
+save
+
   
  
 
  **************************************************************************/
+#define DEBUG 1
 
 #include <SPI.h>
 #include <Wire.h>
@@ -16,15 +19,36 @@
 #include <Adafruit_SSD1306.h>
 #include <Rotary.h>
 #include "CommandLine.h"
+#include <EEPROM.h> //Library needed to read and write from the EEPROM
 
+
+//DEALS WITH THE EEPROM
+#define SIGNATURE 0xAABB //Used to check if the EEPROM has been initialised
+#define SIGLOCATION 0
+#define FREQLOCATION 4
+#define STEPLOCATION 8
+#define DEFAULTFREQ 7000000
+#define DEFAULTSTEP 1000
+#define UPDATEDELAY 1000
+
+
+/// Deals with the OLED Display
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
-    int underBarX;
-    int underBarY;
-
+int underBarX;
+int underBarY;
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+//Declare the pins for the rotary encoder and switch
+#define ROTARYLEFT 2
+#define ROTARYRIGHT 3
+#define PUSHSWITCH 4
+#define LONGPRESS 500
+#define SHORTPRESS 0
+#define DEBOUNCETIME 100
+
 
 //Setup PINS for use with AD9850
 #define W_CLK 8   // Pin 8 - connect to AD9850 module word load clock pin (CLK)
@@ -33,14 +57,14 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define RESET 11  // Pin 11 - connect to reset pin (RST) 
 #define pulseHigh(pin) {digitalWrite(pin, HIGH); digitalWrite(pin, LOW); }
 #define IFFREQ 455000
-#define STARTFREQ 14000000
 
 long tuneStep;
 long ifFreq = IFFREQ;
 double rx;
 
 //Set up rotary encoder
-Rotary r = Rotary(2, 3);
+Rotary r = Rotary(ROTARYLEFT, ROTARYRIGHT); //This sets up the Rotary Encoder including pin modes.
+
 
 void setup() {
   Serial.begin(9600);
@@ -61,18 +85,22 @@ void setup() {
   pulseHigh(W_CLK);
   pulseHigh(FQ_UD);  // this pulse enables serial mode on the AD9850 - Datasheet page 12.
 
-  //Set up for Rotary Encoder
 
+
+  //Set up for Rotary Encoder
   r.begin();
+  pinMode(PUSHSWITCH,INPUT_PULLUP);
 
   ///
-  rx=STARTFREQ;
-  tuneStep=1000;
+  readDefaults();
   setTuneStepIndicator();
   displayFrequency(rx);
   sendFrequency(rx+ifFreq);
   
 }
+
+unsigned long int lastMod;
+bool freqChanged = false;
 
 void loop() {
   if (getCommandLineFromSerialPort(CommandLine) )
@@ -82,6 +110,8 @@ void loop() {
   int result = r.process();
   if (result)
   {
+    freqChanged=true;
+    lastMod=millis();
     if (result == DIR_CW) {
         rx+=tuneStep;
         displayFrequency(rx);
@@ -92,6 +122,87 @@ void loop() {
         sendFrequency(rx);      
       }
   }
+  if (digitalRead(PUSHSWITCH)==LOW){
+    doMainButtonPress();
+  }
+  if ((freqChanged) & (millis()-lastMod>UPDATEDELAY) )
+  {
+    commitEPROMVals();
+    freqChanged=false;
+  }
+  
+}
+
+void changeFeqStep()
+{
+  while(digitalRead(PUSHSWITCH)==HIGH)
+  {
+    int result = r.process();
+    if (result)
+    {
+      if (result == DIR_CW) {
+          if (tuneStep>1)  { tuneStep=tuneStep/10;}
+      } else {
+          if (tuneStep<10000000)  {tuneStep=tuneStep*10;}
+      }
+      setTuneStepIndicator();
+      displayFrequency(rx);
+    }
+  }
+  waitStopBounce();
+}
+
+
+void waitStopBounce()
+{
+  bool state = digitalRead(PUSHSWITCH);
+  bool delayDone=false;
+  long int startTime=millis();
+  while (!delayDone)
+  {
+    if (digitalRead(PUSHSWITCH)==state)
+    {
+      if (millis()-startTime > DEBOUNCETIME)
+      {
+        delayDone=true;
+        break;
+      }
+      state=!state;
+    }
+  }
+}
+
+void doMainButtonPress(){
+  
+    long int pressTime = millis();
+    waitStopBounce();
+    
+    while (digitalRead(PUSHSWITCH)==LOW)
+    {
+      delay(1);
+    }
+    
+    pressTime=millis()-pressTime;
+    Serial.println(pressTime);
+    
+    if (pressTime > LONGPRESS)
+    {
+
+      //Do long press operation
+      for (int a=0;a<5;a++)
+      {
+        digitalWrite(LED_BUILTIN,HIGH);
+        delay(500);
+        digitalWrite(LED_BUILTIN,LOW);
+        delay(500);
+      }
+
+    }
+    else
+    {
+      //Do short press operation
+      changeFeqStep();
+    }
 }
 
 
@@ -171,9 +282,92 @@ void displayFrequency(double hzd)
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(underBarX,underBarY);
     display.print("-");
-    display.setCursor(95, 25);
-    display.print("Gareth, G0CIT");
+    //display.setCursor(95, 25);
+    //display.print("G0CIT");
+    display.setCursor(0, 25);
+    display.print("GARETH - G0CIT");
+
     display.display();      // Show initial text
+}
+
+/**** DEAL WITH EEPROM ****/
+
+void returnToDefault()
+{
+  rx=DEFAULTFREQ;
+  tuneStep=DEFAULTSTEP;
+  setTuneStepIndicator();
+  displayFrequency(rx);
+}
+
+
+void readDefaults()
+{
+  
+  if (readEPROM(SIGLOCATION) != SIGNATURE)
+    {
+      //Means that there has not been any initialised sequence
+      returnToDefault();
+    }
+    else
+    {
+      readEPROMVals();
+    }
+}
+
+void readEPROMVals()
+{
+      rx=readEPROM(FREQLOCATION);
+      tuneStep=readEPROM(STEPLOCATION);
+}
+
+void commitEPROMVals()
+{
+      writeEPROM(SIGLOCATION,SIGNATURE);
+      writeEPROM(FREQLOCATION,rx);
+      writeEPROM(STEPLOCATION,tuneStep);
+}
+
+
+void writeEPROM(int addr, unsigned long int inp)
+{
+  byte LSB=inp;
+  byte MSB=inp>>8;
+  byte MMSB=inp>>16;
+  byte MMMSB=inp>>24;
+  EEPROM.update(addr,LSB);
+  EEPROM.update(addr+1,MSB);
+  EEPROM.update(addr+2,MMSB);
+  EEPROM.update(addr+3,MMMSB);  
+#ifdef DEBUG
+  Serial.print("EEPROM LOC:");
+  Serial.print(addr);
+  Serial.print(" Write = ");
+  Serial.println(inp);
+#endif
+}
+
+
+unsigned long int readEPROM(int addr)
+{
+  byte LSB=EEPROM.read(addr);
+  byte MSB=EEPROM.read(addr+1);
+  byte MMSB=EEPROM.read(addr+2);
+  byte MMMSB=EEPROM.read(addr+3);
+  unsigned long int OP=MMMSB;
+  OP = (OP<<8);
+  OP = OP|MMSB;
+  OP = (OP<<8);
+  OP = OP|MSB;
+  OP = (OP<<8);
+  OP = OP|LSB;
+#ifdef DEBUG
+  Serial.print("EEPROM LOC:");
+  Serial.print(addr);
+  Serial.print(" = ");
+  Serial.println(OP);
+#endif
+  return OP;
 }
 
 
