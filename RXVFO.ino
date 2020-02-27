@@ -1,21 +1,13 @@
 /**************************************************************************
- This is an example for our Monochrome OLEDs based on SSD1306 drivers
 
- Pick one up today in the adafruit shop!
- ------> http://www.adafruit.com/category/63_98
 
- This example is for a 128x32 pixel display using I2C to communicate
- 3 pins are required to interface (two I2C and one reset).
+ Credits to: 
+ 
+  Limor Fried/Ladyada for Adafruit Industries for OLED code
 
- Adafruit invests time and resources providing this open
- source code, please support Adafruit and open-source
- hardware by purchasing products from Adafruit!
+  
+ 
 
- Written by Limor Fried/Ladyada for Adafruit Industries,
- with contributions from the open source community.
- BSD license, check license.txt for more information
- All text above, and the splash screen below must be
- included in any redistribution.
  **************************************************************************/
 
 #include <SPI.h>
@@ -23,6 +15,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Rotary.h>
+
 #include "CommandLine.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -34,6 +27,15 @@
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+//Declare the pins for the rotary encoder and switch
+#define ROTARYLEFT 2
+#define ROTARYRIGHT 3
+#define PUSHSWITCH 4
+#define LONGPRESS 500
+#define SHORTPRESS 0
+#define DEBOUNCETIME 100
+
+
 //Setup PINS for use with AD9850
 #define W_CLK 8   // Pin 8 - connect to AD9850 module word load clock pin (CLK)
 #define FQ_UD 9   // Pin 9 - connect to freq update pin (FQ)
@@ -44,10 +46,12 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define STARTFREQ 14000000
 
 long tuneStep;
+long ifFreq = IFFREQ;
 double rx;
 
 //Set up rotary encoder
-Rotary r = Rotary(2, 3);
+Rotary r = Rotary(ROTARYLEFT, ROTARYRIGHT); //This sets up the Rotary Encoder including pin modes.
+
 
 void setup() {
   Serial.begin(9600);
@@ -68,16 +72,18 @@ void setup() {
   pulseHigh(W_CLK);
   pulseHigh(FQ_UD);  // this pulse enables serial mode on the AD9850 - Datasheet page 12.
 
-  //Set up for Rotary Encoder
 
+
+  //Set up for Rotary Encoder
   r.begin();
+  pinMode(PUSHSWITCH,INPUT_PULLUP);
 
   ///
   rx=STARTFREQ;
   tuneStep=1000;
   setTuneStepIndicator();
   displayFrequency(rx);
-  sendFrequency(rx+IFFREQ);
+  sendFrequency(rx+ifFreq);
   
 }
 
@@ -92,18 +98,103 @@ void loop() {
     if (result == DIR_CW) {
         rx+=tuneStep;
         displayFrequency(rx);
-        sendFrequency(rx+IFFREQ);
+        sendFrequency(rx);
       } else {
         rx-=tuneStep;
         displayFrequency(rx);
-        sendFrequency(rx+IFFREQ);      
+        sendFrequency(rx);      
       }
   }
+  if (digitalRead(PUSHSWITCH)==LOW){
+    doMainButtonPress();
+  }
+  
+}
+
+void changeFeqStep()
+{
+  while(digitalRead(PUSHSWITCH)==HIGH)
+  {
+    int result = r.process();
+    if (result)
+    {
+      if (result == DIR_CW) {
+          if (tuneStep>1)  { tuneStep=tuneStep/10;}
+      } else {
+          if (tuneStep<10000000)  {tuneStep=tuneStep*10;}
+      }
+      setTuneStepIndicator();
+      displayFrequency(rx);
+    }
+  }
+  waitStopBounce();
 }
 
 
+void waitStopBounce()
+{
+  bool state = digitalRead(PUSHSWITCH);
+  bool delayDone=false;
+  long int startTime=millis();
+  while (!delayDone)
+  {
+    if (digitalRead(PUSHSWITCH)==state)
+    {
+      if (millis()-startTime > DEBOUNCETIME)
+      {
+        delayDone=true;
+        break;
+      }
+      state=!state;
+    }
+  }
+}
+
+void doMainButtonPress(){
+  
+    long int pressTime = millis();
+    waitStopBounce();
+    
+    while (digitalRead(PUSHSWITCH)==LOW)
+    {
+      delay(1);
+    }
+    
+    pressTime=millis()-pressTime;
+    Serial.println(pressTime);
+    
+    if (pressTime > LONGPRESS)
+    {
+
+      //Do long press operation
+      for (int a=0;a<5;a++)
+      {
+        digitalWrite(LED_BUILTIN,HIGH);
+        delay(500);
+        digitalWrite(LED_BUILTIN,LOW);
+        delay(500);
+      }
+
+    }
+    else
+    {
+      //Do short press operation
+      changeFeqStep();
+    }
+}
+
+
+
 // frequency calc from datasheet page 8 = <sys clock> * <frequency tuning word>/2^32
-void sendFrequency(double frequency) {  
+/*
+ * The send Frequency code comes from 
+ * https://create.arduino.cc/projecthub/mircemk/arduino-dds-vfo-with-ad9850-module-be3d5e
+ * Credit to Mirko Pavleski
+ */
+
+
+void sendFrequency(double frequency) {
+  frequency = frequency+ifFreq;  //IF Offset
   int32_t freq = frequency * 4294967295/125000000;  // note 125 MHz clock on 9850.  You can make 'slight' tuning variations here by adjusting the clock frequency.
   for (int b=0; b<4; b++, freq>>=8) {
     tfr_byte(freq & 0xFF);
@@ -124,8 +215,6 @@ void tfr_byte(byte data)
 
 void displayFrequency(double hzd)
 {
-
-
     long hz = long(hzd/1);
     long millions = int(hz/1000000);
     long hundredthousands = ((hz/100000)%10);
@@ -168,27 +257,33 @@ void displayFrequency(double hzd)
     display.print(ones);
     display.setTextSize(1); // Draw 1X-scale text
     display.setTextColor(SSD1306_WHITE);
-
-
     display.setCursor(underBarX,underBarY);
     display.print("-");
-    
-    display.setCursor(95, 25);
-    display.print("G0CIT");
+    //display.setCursor(95, 25);
+    //display.print("G0CIT");
+    display.setCursor(0, 25);
+    display.print("GARETH - G0CIT");
     display.display();      // Show initial text
-  
 }
 
 
 
-/////////////?COMMAND LINE INTERFACE EXECUTION
+/** Command Line Interface Routines
+ *  
+ *  Sorry I can't remember where I cribbed this from, but thanks whoever donated this part.
+ *  
+ */
 
+ 
 void printHelp()
 {
    Serial.println("");
    Serial.println("Commands");
-   Serial.println("set | s");
-   Serial.println("step | st");
+   Serial.println("set [long integer] (set operating frequency)");
+   Serial.println("step [long integer] (set tuning step)");
+   Serial.println("setif [integer] (test y position of underbar)");
+   Serial.println("y (test y position of underbar)");
+   Serial.println("x (test x position of underbar)");
    Serial.println("Help | ?");
 }
 
@@ -218,6 +313,7 @@ const char *stepToken = "step";
 const char *stepToken2 = "st";
 const char *Ytoken = "y";
 const char *Xtoken = "x";
+const char *IFSHIFT= "setif";
 
 /****************************************************
    DoMyCommand
@@ -238,7 +334,7 @@ bool DoCommand(char * commandLine) {
       long value = readNumber();
       rx=value;
       displayFrequency(rx);
-      sendFrequency(rx+IFFREQ);
+      sendFrequency(rx);
       commandExecuted=true;
    }
    
@@ -264,6 +360,13 @@ bool DoCommand(char * commandLine) {
      commandExecuted=true;
    }
 
+  if ((strcmp(ptrToCommandName, IFSHIFT) == 0) )  { 
+     long value = readNumber();
+     ifFreq=(int)value;
+     displayFrequency(rx);
+     displayFrequency(rx);
+     commandExecuted=true;
+   }
 
    
    if (!commandExecuted)
@@ -280,7 +383,9 @@ bool DoCommand(char * commandLine) {
 
 
 
-/* OLD CODE EXAPLES 
+/* This is old code from the adafruit library for the display. 
+ *  Not currently used but here so I know where to look if I need it
+ *  
 
 void testdrawline() {
   int16_t i;
