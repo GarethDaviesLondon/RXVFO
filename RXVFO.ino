@@ -49,6 +49,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define LONGPRESS 500
 #define SHORTPRESS 0
 #define DEBOUNCETIME 100
+#define BACKTOTUNETIME 5000
 
 
 //Setup PINS for use with AD9850
@@ -138,13 +139,18 @@ void loop() {
   
 }
 
+unsigned long int pauseTime;
 void changeFeqStep()
 {
+  
+  pauseTime=millis();
   while(digitalRead(PUSHSWITCH)==HIGH)
   {
+
     int result = r.process();
     if (result)
     {
+      pauseTime=millis();
       if (result == DIR_CW) {
           if (tuneStep>1)  { tuneStep=tuneStep/10;}
       } else {
@@ -153,6 +159,7 @@ void changeFeqStep()
       setTuneStepIndicator();
       displayFrequency(rx);
     }
+    if (millis()-pauseTime > BACKTOTUNETIME) {return;} //If no input for moving the dial step then just go back to normal
   }
   waitStopBounce();
 }
