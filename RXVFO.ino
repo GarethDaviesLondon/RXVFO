@@ -18,6 +18,7 @@ save
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Rotary.h>
+
 #include "CommandLine.h"
 #include <EEPROM.h> //Library needed to read and write from the EEPROM
 
