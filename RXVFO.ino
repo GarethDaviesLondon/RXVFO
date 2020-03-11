@@ -13,11 +13,9 @@ IF offset (tested at 455 Khz) and modified by a #define at compile time
 EEPROM stores the last frequency and tuning step selected
 
 
-The code used to drive the AD9850
+The send Frequency code comes from 
 https://create.arduino.cc/projecthub/mircemk/arduino-dds-vfo-with-ad9850-module-be3d5e
 Credit to Mirko Pavleski
-
-The code for the OLED comes from the adafruit libraries.
 
 **************************************************************************/
 
@@ -30,8 +28,8 @@ The code for the OLED comes from the adafruit libraries.
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define DEBUG 1               //Uncomment this to enable debugging features
-#define CLI                   //Uncomment this to enable a command line interface, usefull for development
+//#define DEBUG 1               //Uncomment this to enable debugging features
+//#define CLI                   //Uncomment this to enable a command line interface, usefull for development
 
 #ifdef CLI
   #include "CommandLine.h"    //This is the command line interface code, shamelessly borrowed.
@@ -39,9 +37,9 @@ The code for the OLED comes from the adafruit libraries.
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-//#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
-#define BANNERMESSAGE "AD9850 VFO V2.1 G0CIT"
+//bit of fun with a banner message, remove it if not needed
+#define USEBANNER
+#define BANNERMESSAGE "GARETH - G0CIT"
 #define BANNERX 0
 #define BANNERY 25
 
@@ -55,7 +53,7 @@ The code for the OLED comes from the adafruit libraries.
 
 #define DEFAULTFREQ 7000000 //Set default frequency to 7Mhz. Only used when EEPROM not initialised
 #define DEFAULTSTEP 1000    //Set default tuning step size to 1Khz. Only used when EEPROM not initialised
-#define UPDATEDELAY 5000    //When tuning you don't want to be constantly writing to the EEPROM. So wait
+#define UPDATEDELAY 1000    //When tuning you don't want to be constantly writing to the EEPROM. So wait
                             //For this period of stability before storing frequency and step size.
                             
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,12 +61,11 @@ The code for the OLED comes from the adafruit libraries.
 //These are used for the OLED Screen
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
-
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET); //global handle to the display
 int underBarX;  //This is the global X value that set the location of the underbar
 int underBarY;  //This is the global Y value that set the location of the underbar
-
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET); //global handle to the display
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -358,14 +355,14 @@ void displayFrequency(double hzd)
 {
 
 //Decompose into the component parts of the frequency.
-    long int hz = long(hzd/1);
-    long int millions = int(hz/1000000);
-    long int hundredthousands = ((hz/100000)%10);
-    long int tenthousands = ((hz/10000)%10);
-    long int thousands = ((hz/1000)%10);
-    long int hundreds = ((hz/100)%10);
-    long int tens = ((hz/10)%10);
-    long int ones = ((hz/1)%10);
+    int hz = long(hzd/1);
+    int millions = int(hz/1000000);
+    int hundredthousands = ((hz/100000)%10);
+    int tenthousands = ((hz/10000)%10);
+    int thousands = ((hz/1000)%10);
+    int hundreds = ((hz/100)%10);
+    int tens = ((hz/10)%10);
+    int ones = ((hz/1)%10);
 
 #ifdef DEBUG
 //This checks the calculation for frequency worked.
@@ -378,7 +375,6 @@ void displayFrequency(double hzd)
     Serial.print(hundreds);
     Serial.print(tens);
     Serial.print(ones);
-    Serial.println();
 #endif
   
   
