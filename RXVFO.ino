@@ -30,18 +30,17 @@ The code for the OLED comes from the adafruit libraries.
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define DEBUG 1               //Uncomment this to enable debugging features
+//#define DEBUG 1               //Uncomment this to enable debugging features
 #define CLI                   //Uncomment this to enable a command line interface, usefull for development
 
 #ifdef CLI
   #include "CommandLine.h"    //This is the command line interface code, shamelessly borrowed.
 #endif
 
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-//#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
+#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
 #define BANNERMESSAGE "AD9850 VFO V2.1 G0CIT"
 #define BANNERX 0
 #define BANNERY 25
@@ -131,6 +130,7 @@ void setup() {
   r.begin();
   pinMode(PUSHSWITCH,INPUT_PULLUP);
 
+
   readDefaults();         //check EEPROM for startup conditions
   setTuneStepIndicator(); //set up the X&Y for the step underbar 
   displayFrequency(rx);   //display the frequency on the OLED
@@ -139,20 +139,39 @@ void setup() {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 
-unsigned long int lastMod;
-bool freqChanged = false;
+This is the main loop which polls the rotary switch and the press button.
+I found that when the SPI code is used it can be awkward to use Interrupt Services which might be 
+better. With the short cycle of this loop code though there are no issues with missed events
+
+*/ 
+
+
+unsigned long int lastMod; //This records the time the last modification was made. 
+                           //It is used to know when to confirm the EEPROM update
+bool freqChanged = false;  //This is used to know if there has been an update, if so
+                           //It is a candidate for writing to EEPROM if it was last done long enough ago
 
 void loop() {
-  if (getCommandLineFromSerialPort(CommandLine) )
+
+#ifdef CLI
+  if (getCommandLineFromSerialPort(CommandLine) )  //Put a command line interface serivce routine in.
           {
             DoCommand(CommandLine);
           }
-  int result = r.process();
+#endif
+
+
+///CHECK IF WE NEED TO CHANGE FREQUENCY////////
+  int result = r.process();       //This checks to see if there has been an event on the rotary encoder.
   if (result)
   {
-    freqChanged=true;
-    lastMod=millis();
+    
+    freqChanged=true; //used to check the EEPROM writing            
+    lastMod=millis(); //used to check the EEPROM writing
+    
+    //Increment or decrement the frequency by the tuning step depending on direction of movement.
     if (result == DIR_CW) {
         rx+=tuneStep;
         if (rx>MAXFREQ) {rx = MAXFREQ;}
@@ -165,9 +184,15 @@ void loop() {
         sendFrequency(rx);      
       }
   }
+//////////
+
+//See if we've pressed the button
   if (digitalRead(PUSHSWITCH)==LOW){
-    doMainButtonPress();
+    doMainButtonPress();  //process the switch push
   }
+
+/// See if we need to update the EEPROM
+
   if ((freqChanged) & (millis()-lastMod>UPDATEDELAY) )
   {
     commitEPROMVals();
@@ -176,68 +201,36 @@ void loop() {
   
 }
 
-unsigned long int pauseTime;
-void changeFeqStep()
-{
-  
-  pauseTime=millis();
-  while(digitalRead(PUSHSWITCH)==HIGH)
-  {
 
-    int result = r.process();
-    if (result)
-    {
-      pauseTime=millis();
-      if (result == DIR_CW) {
-          if (tuneStep>1)  { tuneStep=tuneStep/10;}
-      } else {
-          if (tuneStep<10000000)  {tuneStep=tuneStep*10;}
-      }
-      setTuneStepIndicator();
-      displayFrequency(rx);
-    }
-    if (millis()-pauseTime > BACKTOTUNETIME) {return;} //If no input for moving the dial step then just go back to normal
-  }
-  waitStopBounce();
-}
-
-
-void waitStopBounce()
-{
-  bool state = digitalRead(PUSHSWITCH);
-  bool delayDone=false;
-  long int startTime=millis();
-  while (!delayDone)
-  {
-    if (digitalRead(PUSHSWITCH)==state)
-    {
-      if (millis()-startTime > DEBOUNCETIME)
-      {
-        delayDone=true;
-        break;
-      }
-      state=!state;
-    }
-  }
-}
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void doMainButtonPress(){
   
-    long int pressTime = millis();
-    waitStopBounce();
+    long int pressTime = millis();  //reord when we enter the routine, used to determine the length of the button
+                                    //press
     
-    while (digitalRead(PUSHSWITCH)==LOW)
+    waitStopBounce(PUSHSWITCH);               //wait until the switch noise has gone  
+    
+
+
+    while (digitalRead(PUSHSWITCH)==LOW) //Sit in this routine while the button is pressed
     {
-      delay(1);
+      delay(1); //No operation but makes sure the compiler doesn't optimise this code away
     }
     
-    pressTime=millis()-pressTime;
-    Serial.println(pressTime);
-    
-    if (pressTime > LONGPRESS)
-    {
+    pressTime=millis()-pressTime; //This records the duration of the button press
 
-      //Do long press operation
+#ifdef DEBUG
+    Serial.print("Button Press Duration (ms) : ");
+    Serial.println(pressTime);
+#endif
+    
+    if (pressTime > LONGPRESS) //Check against the defined length of a long press
+    {
+       //Do long press operations
+
+#ifdef DEBUG
+      Serial.println("Long Press Detected");
       for (int a=0;a<5;a++)
       {
         digitalWrite(LED_BUILTIN,HIGH);
@@ -245,24 +238,100 @@ void doMainButtonPress(){
         digitalWrite(LED_BUILTIN,LOW);
         delay(500);
       }
-
+#endif
     }
+    
     else
     {
-      //Do short press operation
+      //Do short press operations
       changeFeqStep();
+
+      
+#ifdef DEBUG
+      Serial.println("Short Press Detected");
+      for (int a=0;a<5;a++)
+      {
+        digitalWrite(LED_BUILTIN,HIGH);
+        delay(100);
+        digitalWrite(LED_BUILTIN,LOW);
+        delay(100);
+      }
+#endif
     }
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//Removes bounce on the input switch
+
+//Simple delay version
+void waitStopBounce(int pin)
+{
+  long int startTime=millis();
+  while (millis()-startTime < DEBOUNCETIME)
+  {
+    delay(1);
+  }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+void changeFeqStep()
+{
+  
+  unsigned long int pauseTime=millis(); //record when we start this operation
+  
+  while(digitalRead(PUSHSWITCH)==HIGH) //This stays in this routine until the button is pressed again to exit.
+  {
+    int result = r.process();
+    if (result)
+    {
+      pauseTime=millis();               //update the timer to show that we've taken action
+      
+      if (result == DIR_CW) {
+          if (tuneStep>1)  { tuneStep=tuneStep/10;}
+      } else {
+          if (tuneStep<10000000)  {tuneStep=tuneStep*10;}
+      }
+      
+      setTuneStepIndicator();
+      displayFrequency(rx);
+      
+    }
+    
+
+    //If no input for moving the dial step then just go back to normal
+    //There is a possible - but unlikely - scenario that the button is pressed as this timeout occurs, that would result in
+    //bouncy switch condition, hence the debounce requirement
+    if (millis()-pauseTime > BACKTOTUNETIME) {
+                 waitStopBounce(PUSHSWITCH);
+                 return;
+    } 
+  }
+
+  
+  //make sure that the swith has stopped bouncing before returning to the main routine.
+  //There is a bug possible here if we don't wait for the release before returning
+  //Possible that a long press on the way out of this routine could see you return here
+  //due to switch bounce, which would appear to the user that the routine didn't exit
+  //also possible to go accidently into a long-press scenario
+  
+  waitStopBounce(PUSHSWITCH);
+ 
+  while (digitalRead(PUSHSWITCH)==LOW) //to avoid exit bug when the user keeps the button pressed for a long period
+  {
+    delay(1);                 
+  }
+  
+  waitStopBounce(PUSHSWITCH);                            
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 // frequency calc from datasheet page 8 = <sys clock> * <frequency tuning word>/2^32
-/*
- * The send Frequency code comes from 
- * https://create.arduino.cc/projecthub/mircemk/arduino-dds-vfo-with-ad9850-module-be3d5e
- * Credit to Mirko Pavleski
- */
 
 
 void sendFrequency(double frequency) {
@@ -283,25 +352,24 @@ void tfr_byte(byte data)
   }
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 void displayFrequency(double hzd)
 {
-    long hz = long(hzd/1);
-    long millions = int(hz/1000000);
-    long hundredthousands = ((hz/100000)%10);
-    long tenthousands = ((hz/10000)%10);
-    long thousands = ((hz/1000)%10);
-    long hundreds = ((hz/100)%10);
-    long tens = ((hz/10)%10);
-    long ones = ((hz/1)%10);
 
-  
-  display.clearDisplay();
-  display.setTextSize(2); // Draw 2X-scale text
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(10, 0);
- /*
+//Decompose into the component parts of the frequency.
+    long int hz = long(hzd/1);
+    long int millions = int(hz/1000000);
+    long int hundredthousands = ((hz/100000)%10);
+    long int tenthousands = ((hz/10000)%10);
+    long int thousands = ((hz/1000)%10);
+    long int hundreds = ((hz/100)%10);
+    long int tens = ((hz/10)%10);
+    long int ones = ((hz/1)%10);
+
+#ifdef DEBUG
+//This checks the calculation for frequency worked.
     Serial.print(millions);
     Serial.print(".");
     Serial.print(hundredthousands);
@@ -311,12 +379,19 @@ void displayFrequency(double hzd)
     Serial.print(hundreds);
     Serial.print(tens);
     Serial.print(ones);
-  */
-    
+    Serial.println();
+#endif
+  
+  
+    display.clearDisplay();
+    display.setTextSize(2); // Draw 2X-scale text
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(10, 0);
     if (millions<10)
     {
       display.print("0");
     }
+    display.setTextSize(2); // Draw 2X-scale text
     display.print(millions);
     display.print(".");
     display.print(hundredthousands);
@@ -327,27 +402,38 @@ void displayFrequency(double hzd)
     display.print(hundreds);
     display.print(tens);
     display.print(ones);
-    display.setTextSize(1); // Draw 1X-scale text
-    display.setTextColor(SSD1306_WHITE);
     display.setCursor(underBarX,underBarY);
     display.print("-");
-    //display.setCursor(95, 25);
-    //display.print("G0CIT");
-    display.setCursor(0, 25);
-    display.print("GARETH - G0CIT");
+    
+#ifdef USEBANNER
+    display.setCursor(BANNERX, BANNERY);
+    display.print(BANNERMESSAGE);
+#endif
 
     display.display();      // Show initial text
 }
 
-/**** DEAL WITH EEPROM ****/
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void returnToDefault()
+
+void setTuneStepIndicator()
+//This sets up the underbar X & Y locations based on the 
+//value of tuneStep, which. Underlines the frequency display
+//Values were found by trial and error using the CLI                 
 {
-  rx=DEFAULTFREQ;
-  tuneStep=DEFAULTSTEP;
-  setTuneStepIndicator();
-  displayFrequency(rx);
+    underBarY = 15;
+    if (tuneStep==10000000) underBarX=13;
+    if (tuneStep==1000000) underBarX=22;
+    if (tuneStep==100000) underBarX=48;
+    if (tuneStep==10000) underBarX=60;
+    if (tuneStep==1000) underBarX=72;
+    if (tuneStep<1000) underBarY=7;
+    if (tuneStep==100) underBarX=88;
+    if (tuneStep==10) underBarX=95;
+    if (tuneStep==1) underBarX=100;
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 void readDefaults()
@@ -355,8 +441,12 @@ void readDefaults()
   
   if (readEPROM(SIGLOCATION) != SIGNATURE)
     {
-      //Means that there has not been any initialised sequence
-      returnToDefault();
+       //Means that there has not been any initialised sequence stored in EEPROM yet
+       //Comes from a virgin processor, or a change in the SIGNATURE
+        rx=DEFAULTFREQ;
+        tuneStep=DEFAULTSTEP;
+        setTuneStepIndicator();
+        displayFrequency(rx);
     }
     else
     {
@@ -364,11 +454,15 @@ void readDefaults()
     }
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void readEPROMVals()
 {
       rx=readEPROM(FREQLOCATION);
       tuneStep=readEPROM(STEPLOCATION);
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void commitEPROMVals()
 {
@@ -376,6 +470,8 @@ void commitEPROMVals()
       writeEPROM(FREQLOCATION,rx);
       writeEPROM(STEPLOCATION,tuneStep);
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 void writeEPROM(int addr, unsigned long int inp)
@@ -396,6 +492,8 @@ void writeEPROM(int addr, unsigned long int inp)
 #endif
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 unsigned long int readEPROM(int addr)
 {
@@ -413,17 +511,20 @@ unsigned long int readEPROM(int addr)
 #ifdef DEBUG
   Serial.print("EEPROM LOC:");
   Serial.print(addr);
-  Serial.print(" = ");
+  Serial.print(" Read = ");
   Serial.println(OP);
 #endif
   return OP;
 }
 
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef CLI
 
 /** Command Line Interface Routines
  *  
- *  Sorry I can't remember where I cribbed this from, but thanks whoever donated this part.
+ *  I can't remember where I cribbed this from, but thanks whoever donated this part.
  *  
  */
 
@@ -434,25 +535,12 @@ void printHelp()
    Serial.println("Commands");
    Serial.println("set [long integer] (set operating frequency)");
    Serial.println("step [long integer] (set tuning step)");
-   Serial.println("setif [integer] (test y position of underbar)");
+   Serial.println("setif [integer] (Change the IF Frequency)");
    Serial.println("y (test y position of underbar)");
    Serial.println("x (test x position of underbar)");
    Serial.println("Help | ?");
 }
 
-void setTuneStepIndicator()
-{
-    underBarY = 15;
-    if (tuneStep==10000000) underBarX=13;
-    if (tuneStep==1000000) underBarX=22;
-    if (tuneStep==100000) underBarX=48;
-    if (tuneStep==10000) underBarX=60;
-    if (tuneStep==1000) underBarX=72;
-    if (tuneStep<1000) underBarY=7;
-    if (tuneStep==100) underBarX=88;
-    if (tuneStep==10) underBarX=95;
-    if (tuneStep==1) underBarX=100;
-}
 
 
 /*************************************************************************************************************
@@ -532,7 +620,10 @@ bool DoCommand(char * commandLine) {
 }
 
 
+#endif
 
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
