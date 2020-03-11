@@ -324,8 +324,6 @@ void changeFeqStep()
 }
 
 
-
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -427,8 +425,6 @@ void setTuneStepIndicator()
     if (tuneStep==10) underBarX=95;
     if (tuneStep==1) underBarX=100;
 }
-
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -532,7 +528,7 @@ void printHelp()
    Serial.println("Commands");
    Serial.println("set [long integer] (set operating frequency)");
    Serial.println("step [long integer] (set tuning step)");
-   Serial.println("setif [integer] (test y position of underbar)");
+   Serial.println("setif [integer] (Change the IF Frequency)");
    Serial.println("y (test y position of underbar)");
    Serial.println("x (test x position of underbar)");
    Serial.println("Help | ?");
