@@ -30,7 +30,7 @@ The code for the OLED comes from the adafruit libraries.
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define DEBUG 1               //Uncomment this to enable debugging features
+//#define DEBUG 1               //Uncomment this to enable debugging features
 #define CLI                   //Uncomment this to enable a command line interface, usefull for development
 
 #ifdef CLI
@@ -40,7 +40,7 @@ The code for the OLED comes from the adafruit libraries.
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-//#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
+#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
 #define BANNERMESSAGE "AD9850 VFO V2.1 G0CIT"
 #define BANNERX 0
 #define BANNERY 25
@@ -129,6 +129,7 @@ void setup() {
   //Set up for Rotary Encoder
   r.begin();
   pinMode(PUSHSWITCH,INPUT_PULLUP);
+
 
   readDefaults();         //check EEPROM for startup conditions
   setTuneStepIndicator(); //set up the X&Y for the step underbar 
@@ -383,6 +384,8 @@ void displayFrequency(double hzd)
   
   
     display.clearDisplay();
+    display.setTextSize(2); // Draw 2X-scale text
+    display.setTextColor(SSD1306_WHITE);
     display.setCursor(10, 0);
     if (millions<10)
     {
