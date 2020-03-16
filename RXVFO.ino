@@ -39,8 +39,12 @@ The code for the OLED comes from the adafruit libraries.
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//THis is for the second line of text. Use either Display IF Frequency, or a banner. Your choice
+//Might as well put the banner here, because you'll change it for your callsign!
+//Just raise a pint in my direction when you tell everyone that you wrote this :-)
 
-#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
+#define DISPLAYIFFREQUENCY //This displays the IFFREQ. 
+//#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
 #define BANNERMESSAGE "AD9850 VFO V2.1 G0CIT"
 #define BANNERX 0
 #define BANNERY 25
@@ -96,11 +100,12 @@ Rotary r = Rotary(ROTARYLEFT, ROTARYRIGHT); //This sets up the Rotary Encoder in
 //The following values need to be positive as they are used as "unsigned long int" types in the EEPROM routines
 
 #define IFFREQ 455000 //IF Frequency - offset between displayed and produced signal
+#define IFFERROR 1500 //Observed error in BFO
 #define MAXFREQ 30000000  //Sets the upper edge of the frequency range (30Mhz)
 #define MINFREQ 100000    //Sets the lower edge of the frequency range (100Khz)
 
 long tuneStep;        //global for the current increment - enables it to be changed in interrupt routines
-long ifFreq = IFFREQ; //global for the receiver IF. Made variable so it could be manipulated by the CLI for instance
+long ifFreq = IFFREQ+IFFERROR; //global for the receiver IF. Made variable so it could be manipulated by the CLI for instance
 double rx;            //global for the current receiver frequency
 
 
@@ -290,11 +295,28 @@ void changeFeqStep()
       pauseTime=millis();               //update the timer to show that we've taken action
       
       if (result == DIR_CW) {
-          if (tuneStep>1)  { tuneStep=tuneStep/10;}
+          if (tuneStep>1)  { 
+            if (tuneStep==1000) {tuneStep=500;}
+            else{
+              if (tuneStep==500) {tuneStep=100;}
+              else
+                {
+                  tuneStep=tuneStep/10;     
+                }
+            }
+          }
       } else {
-          if (tuneStep<10000000)  {tuneStep=tuneStep*10;}
+          if (tuneStep<10000000)  {
+            if (tuneStep==100) {tuneStep=500;}
+            else{
+              if (tuneStep==500) {tuneStep=1000;}
+              else
+                {
+                  tuneStep=tuneStep*10;     
+                }
+            }
+          }
       }
-      
       setTuneStepIndicator();
       displayFrequency(rx);
       
@@ -409,7 +431,13 @@ void displayFrequency(double hzd)
     display.setCursor(BANNERX, BANNERY);
     display.print(BANNERMESSAGE);
 #endif
-
+#ifdef DISPLAYIFFREQUENCY
+    display.setCursor(BANNERX, BANNERY);
+    display.print(" IF = ");
+    display.print(ifFreq/1000);
+    display.print(".");
+    display.print(ifFreq%1000);
+#endif
     display.display();      // Show initial text
 }
 
@@ -429,6 +457,7 @@ void setTuneStepIndicator()
     if (tuneStep==1000) underBarX=72;
     if (tuneStep<1000) underBarY=7;
     if (tuneStep==100) underBarX=88;
+    if (tuneStep==500) underBarX=88;
     if (tuneStep==10) underBarX=95;
     if (tuneStep==1) underBarX=100;
 }
