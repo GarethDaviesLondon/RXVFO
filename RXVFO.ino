@@ -45,7 +45,7 @@ The code for the OLED comes from the adafruit libraries.
 
 #define DISPLAYIFFREQUENCY //This displays the IFFREQ. 
 //#define USEBANNER //bit of fun with a banner message, comment out if you want to turn it off
-#define BANNERMESSAGE "AD9850 VFO V2.1 G0CIT"
+//#define BANNERMESSAGE "AD9850 VFO V2.1 G0CIT"
 #define BANNERX 0
 #define BANNERY 25
 
