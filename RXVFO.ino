@@ -21,7 +21,7 @@ The code for the OLED comes from the adafruit libraries.
 
 **************************************************************************/
 
-#include <SPI.h>              //This is needed for the OLED display which is SPI interface
+//#include <SPI.h>              //This is needed for the OLED display which is SPI interface
 #include <Wire.h>             //Needed by the SPI library
 #include <Adafruit_GFX.h>     //Used for the OLED display, called by the SSD1306 Library
 #include <Adafruit_SSD1306.h> //This is the OLED driver library
