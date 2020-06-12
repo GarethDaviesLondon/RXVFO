@@ -57,8 +57,8 @@ The code for the OLED comes from the adafruit libraries.
 #define FREQLOCATION 4   //Location where Current Frequency is stored
 #define STEPLOCATION 8   //Location where Current Step size is stored
 
-#define DEFAULTFREQ 7000000 //Set default frequency to 7Mhz. Only used when EEPROM not initialised
-#define DEFAULTSTEP 1000    //Set default tuning step size to 1Khz. Only used when EEPROM not initialised
+#define DEFAULTFREQ 32768 //Set default frequency to 7Mhz. Only used when EEPROM not initialised
+#define DEFAULTSTEP 1    //Set default tuning step size to 1Khz. Only used when EEPROM not initialised
 #define UPDATEDELAY 5000    //When tuning you don't want to be constantly writing to the EEPROM. So wait
                             //For this period of stability before storing frequency and step size.
                             
@@ -99,10 +99,10 @@ Rotary r = Rotary(ROTARYLEFT, ROTARYRIGHT); //This sets up the Rotary Encoder in
 
 //The following values need to be positive as they are used as "unsigned long int" types in the EEPROM routines
 
-#define IFFREQ 455000 //IF Frequency - offset between displayed and produced signal
-#define IFFERROR 1500 //Observed error in BFO
-#define MAXFREQ 30000000  //Sets the upper edge of the frequency range (30Mhz)
-#define MINFREQ 100000    //Sets the lower edge of the frequency range (100Khz)
+#define IFFREQ 0 //IF Frequency - offset between displayed and produced signal
+#define IFFERROR 0 //Observed error in BFO
+#define MAXFREQ 50000  //Sets the upper edge of the frequency range (30Mhz)
+#define MINFREQ 10000    //Sets the lower edge of the frequency range (100Khz)
 
 long tuneStep;        //global for the current increment - enables it to be changed in interrupt routines
 long ifFreq = IFFREQ+IFFERROR; //global for the receiver IF. Made variable so it could be manipulated by the CLI for instance
